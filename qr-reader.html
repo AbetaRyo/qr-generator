@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>QRコード読み取り</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    #reader {
+      width: 300px;
+      margin: auto;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 18px;
+      color: green;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <h1>📷 QRコード読み取り</h1>
+  <div id="reader"></div>
+  <div id="result">ここに読み取った内容が表示されます</div>
+
+  <script>
+    function onScanSuccess(decodedText, decodedResult) {
+      document.getElementById("result").innerText = "読み取った内容: " + decodedText;
+      // 読み取った内容を別タブで開く場合（例: URLならリンク先へ）
+      // window.open(decodedText, "_blank");
+    }
+
+    function onScanFailure(error) {
+      // 読み取り失敗時は特に何もしない（エラーを無視）
+    }
+
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+      "reader", 
+      { fps: 10, qrbox: 250 }  // fps: 秒間フレーム数, qrbox: 読み取り枠サイズ
+    );
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+  </script>
+</body>
+</html>

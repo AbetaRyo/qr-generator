@@ -2,42 +2,119 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>🕵️‍♂️ QRコード照合ページ（スタッフ用）</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <title>JWT一致照合ツール（カメラ対応）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
-    #reader { width: 320px; margin: auto; }
-    #result { margin-top: 20px; font-size: 18px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+    textarea { width: 90%; padding: 10px; font-size: 14px; margin: 10px auto; display: block; }
+    pre { background: #f9f9f9; padding: 10px; white-space: pre-wrap; text-align: left; width: 90%; margin: 10px auto; border-radius: 8px; border: 1px solid #ccc; }
+    .match { color: green; font-weight: bold; }
+    .mismatch { color: red; font-weight: bold; }
+    #reader { width: 300px; margin: 20px auto; }
   </style>
 </head>
 <body>
-  <h1>🕵️‍♂️ 入場確認システム（スタッフ用）</h1>
 
+  <h1>📷 JWTの照合チェック（QRコード読み取り対応）</h1>
+
+  <p>順番にQRコードを読み取ってください。</p>
+  <button onclick="startScan()">QRコードを読み取る</button>
   <div id="reader"></div>
-  <div id="result"></div>
+
+  <textarea id="jwt1" rows="3" placeholder="① チケット購入時のJWT"></textarea>
+  <textarea id="jwt2" rows="3" placeholder="② 会場入場時のJWT"></textarea>
+
+  <button onclick="compareJWTs()">JWTを照合</button>
+
+  <h3>📄 JWT①（Payload）</h3>
+  <pre id="payload1"></pre>
+
+  <h3>📄 JWT②（Payload）</h3>
+  <pre id="payload2"></pre>
+
+  <h3>🔍 照合結果</h3>
+  <p id="result"></p>
 
   <script>
-    async function sendToServer(jwt) {
-      const res = await fetch("http://localhost:3000/verify-entry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jwt })
-      });
-      const data = await res.json();
-      document.getElementById('result').innerHTML = `<h3>${data.message}</h3>`;
+    let scanStep = 1; // 1つ目か2つ目かを管理
+
+    function decodePayload(jwt) {
+      const parts = jwt.split(".");
+      if (parts.length !== 3) throw new Error("JWT形式が不正です");
+
+      const payloadB64 = parts[1]
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        .padEnd(parts[1].length + (4 - parts[1].length % 4) % 4, '=');
+
+      const decoded = atob(payloadB64);
+      return JSON.parse(decoded);
     }
 
-    function onScanSuccess(decodedText) {
-      document.getElementById('result').textContent = "認証中...";
-      sendToServer(decodedText);
+    function compareJWTs() {
+      const jwt1 = document.getElementById('jwt1').value.trim();
+      const jwt2 = document.getElementById('jwt2').value.trim();
+      const resultEl = document.getElementById('result');
+
+      if (!jwt1 || !jwt2) {
+        alert("両方のJWTを入力または読み取ってください。");
+        return;
+      }
+
+      try {
+        const payload1 = decodePayload(jwt1);
+        const payload2 = decodePayload(jwt2);
+
+        document.getElementById('payload1').textContent = JSON.stringify(payload1, null, 2);
+        document.getElementById('payload2').textContent = JSON.stringify(payload2, null, 2);
+
+        const match =
+          payload1.user_id === payload2.user_id &&
+          payload1.device_id === payload2.device_id &&
+          payload1.ticket_source === payload2.ticket_source;
+
+        if (match) {
+          resultEl.innerHTML = "<span class='match'>✅ 同一人物・同一端末で発行されたQRコードです</span>";
+        } else {
+          resultEl.innerHTML = "<span class='mismatch'>❌ 情報が一致しません。同一人物ではない可能性があります</span>";
+        }
+      } catch (e) {
+        console.error("エラー:", e);
+        alert("JWTの解析に失敗しました。");
+        resultEl.textContent = '';
+      }
     }
 
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      onScanSuccess
-    );
+    function startScan() {
+      const readerDiv = document.getElementById("reader");
+      readerDiv.innerHTML = ""; // 初期化
+
+      const html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: 250 };
+
+      html5QrCode.start(
+        { facingMode: "environment" }, // 背面カメラ
+        config,
+        (decodedText) => {
+          if (scanStep === 1) {
+            document.getElementById("jwt1").value = decodedText;
+            alert("✅ 1つ目のQRコードを読み取りました！");
+            scanStep = 2;
+          } else {
+            document.getElementById("jwt2").value = decodedText;
+            alert("✅ 2つ目のQRコードを読み取りました！");
+            html5QrCode.stop();
+            compareJWTs(); // 2つ読み取ったら自動照合
+            scanStep = 1; // リセット
+          }
+        },
+        (errorMessage) => {
+          // 読み取り失敗は無視
+        }
+      );
+    }
   </script>
 </body>
 </html>

@@ -1,64 +1,47 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <title>🎫 チケット購入時 QRコード生成</title>
+import express from "express";
+import bodyParser from "body-parser";
+import cors from "cors";
+import { KJUR } from "jsrsasign";
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+const app = express();
+app.use(cors());
+app.use(bodyParser.json());
 
-  <style>
-    body { font-family: sans-serif; text-align: center; padding-top: 40px; }
-    input, button { margin: 8px; padding: 8px; font-size: 15px; }
-    canvas { margin-top: 20px; }
-    pre { background: #f9f9f9; padding: 10px; width: 90%; margin: auto; text-align: left; }
-  </style>
-</head>
-<body>
-  <h1>🎫 チケット購入時 QRコード生成</h1>
-  <input type="text" id="user_id" placeholder="ユーザーID"><br>
-  <input type="text" id="ticket_source" placeholder="チケットサイト名"><br>
-  <button onclick="generateQRCode()">QRコードを生成</button>
-  <div id="qrcode"></div>
-  <pre id="jwtDisplay"></pre>
+const SECRET = "your_super_secret_key";
+let savedJWT = null;
 
-  <script>
-    async function generateQRCode() {
-      const user_id = document.getElementById('user_id').value.trim();
-      const ticket_source = document.getElementById('ticket_source').value.trim();
-      if (!user_id || !ticket_source) return alert("入力してください");
+app.post("/save-purchase", (req, res) => {
+  savedJWT = req.body.jwt;
+  console.log("保存されたJWT:", savedJWT);
+  res.json({ message: "保存完了" });
+});
 
-      const device_id = localStorage.getItem('device_id') || (() => {
-        const id = crypto.randomUUID();
-        localStorage.setItem('device_id', id);
-        return id;
-      })();
+app.post("/verify-entry", (req, res) => {
+  const entryJWT = req.body.jwt;
+  if (!savedJWT) return res.json({ message: "購入データが未登録です" });
 
-      const payload = {
-        user_id,
-        device_id,
-        ticket_source,
-        iat: KJUR.jws.IntDate.get('now'),
-        exp: KJUR.jws.IntDate.get('now + 1hour')
-      };
-      const header = { alg: "HS256", typ: "JWT" };
-      const secret = "your_super_secret_key";
+  try {
+    const purchasePayload = KJUR.jws.JWS.readSafeJSONString(
+      Buffer.from(savedJWT.split(".")[1], "base64").toString()
+    );
+    const entryPayload = KJUR.jws.JWS.readSafeJSONString(
+      Buffer.from(entryJWT.split(".")[1], "base64").toString()
+    );
 
-      const jwt = KJUR.jws.JWS.sign(null, JSON.stringify(header), JSON.stringify(payload), secret);
-
-      // ✅ サーバーへ保存リクエスト
-      await fetch("http://localhost:3000/save-purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jwt })
-      });
-
-      // QR表示
-      document.getElementById('jwtDisplay').textContent = jwt;
-      const div = document.getElementById('qrcode');
-      div.innerHTML = "";
-      QRCode.toCanvas(jwt, { width: 300 }, (err, canvas) => div.appendChild(canvas));
+    if (
+      purchasePayload.user_id === entryPayload.user_id &&
+      purchasePayload.device_id === entryPayload.device_id
+    ) {
+      res.json({ message: "✅ 本人確認OK" });
+    } else {
+      res.json({ message: "❌ 情報が一致しません" });
     }
-  </script>
-</body>
-</html>
+  } catch (e) {
+    console.error(e);
+    res.json({ message: "JWT解析エラー" });
+  }
+});
+
+// Render対応：ポート指定
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

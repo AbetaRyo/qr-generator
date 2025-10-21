@@ -66,7 +66,7 @@
 
     // AES鍵（デモ用固定キー）
     async function getAesKey() {
-      const keyMaterial = new TextEncoder().encode("demo_secret_key_1234");
+      const keyMaterial = new TextEncoder().encode("demo_secret_key_1234_5678_90abcd!!");
       return crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["encrypt", "decrypt"]);
     }
 
@@ -181,3 +181,4 @@
   </script>
 </body>
 </html>
+

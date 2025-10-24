@@ -2,37 +2,38 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>QRコード復号・認証ツール</title>
+  <title>🎫 JWT照合（QR読み取り＋AES復号）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
     button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
-    textarea { width: 90%; padding: 10px; font-size: 14px; margin: 10px auto; display: block; }
     pre { background: #f9f9f9; padding: 10px; white-space: pre-wrap; text-align: left; width: 90%; margin: 10px auto; border-radius: 8px; border: 1px solid #ccc; }
+    #reader { width: 300px; margin: 20px auto; }
     .match { color: green; font-weight: bold; }
     .mismatch { color: red; font-weight: bold; }
-    #reader { width: 300px; margin: 20px auto; }
   </style>
 </head>
 <body>
 
-  <h1>📷 QRコード認証（AES復号＋端末照合）</h1>
+  <h1>📷 JWT認証（AES復号＋QR読み取り）</h1>
 
   <button onclick="startScan()">QRコードを読み取る</button>
   <div id="reader"></div>
 
-  <textarea id="jwt" rows="3" placeholder="QRコードから読み取られたJWT"></textarea>
+  <h3>📦 JWT（文字列）</h3>
+  <pre id="jwtDisplay"></pre>
 
-  <h3>📄 JWT Payload</h3>
-  <pre id="payload"></pre>
+  <h3>📄 Payload</h3>
+  <pre id="payloadDisplay"></pre>
 
   <h3>🔍 認証結果</h3>
   <p id="result"></p>
 
   <script>
-    // --- AES鍵を生成（QR発行側と同じ鍵素材を使用） ---
+    // AES鍵を生成（QR生成側と同じ鍵を使う）
     async function getAesKey() {
-      const keyMaterial = new TextEncoder().encode("1234567890abcdef1234567890abcdef"); // 32文字＝256bit
+      const keyMaterial = new TextEncoder().encode("1234567890abcdef1234567890abcdef");
       return crypto.subtle.importKey(
         "raw",
         keyMaterial,
@@ -42,40 +43,32 @@
       );
     }
 
-    // --- Base64文字列 → Uint8Array ---
-    function base64ToBytes(base64) {
-      const binary = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return bytes;
+    // AES復号処理（QR生成側と対応）
+    async function decryptDeviceId(base64) {
+      const key = await getAesKey();
+      const data = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const iv = data.slice(0, 12);
+      const cipher = data.slice(12);
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+      return new TextDecoder().decode(plain);
     }
 
-    // --- AES-GCMで復号 ---
-    async function decryptAES(encryptedBase64, ivBase64, key) {
-      const encryptedData = base64ToBytes(encryptedBase64);
-      const iv = base64ToBytes(ivBase64);
-      const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encryptedData);
-      return new TextDecoder().decode(decrypted);
-    }
-
-    // --- JWTのPayloadをデコード ---
+    // JWTデコード
     function decodePayload(jwt) {
       const parts = jwt.split(".");
       if (parts.length !== 3) throw new Error("JWT形式が不正です");
-      const payloadB64 = parts[1]
-        .replace(/-/g, '+')
-        .replace(/_/g, '/')
-        .padEnd(parts[1].length + (4 - parts[1].length % 4) % 4, '=');
-      const decoded = atob(payloadB64);
+      const payloadB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = payloadB64.padEnd(payloadB64.length + (4 - payloadB64.length % 4) % 4, "=");
+      const decoded = atob(padded);
       return JSON.parse(decoded);
     }
 
-    // --- QR読み取り開始 ---
+    // メイン処理：QR読み取り開始
     function startScan() {
       const readerDiv = document.getElementById("reader");
-      readerDiv.innerHTML = ""; // 初期化
-
+      readerDiv.innerHTML = "";
       const html5QrCode = new Html5Qrcode("reader");
+
       const config = { fps: 10, qrbox: 250 };
 
       html5QrCode.start(
@@ -83,35 +76,42 @@
         config,
         async (decodedText) => {
           html5QrCode.stop();
-          document.getElementById("jwt").value = decodedText;
-          await verifyQRCode(decodedText);
+          document.getElementById("jwtDisplay").textContent = decodedText;
+
+          try {
+            const payload = decodePayload(decodedText);
+            document.getElementById("payloadDisplay").textContent =
+              JSON.stringify(payload, null, 2);
+
+            // AES復号して比較
+            if (!payload.device_id_encrypted || !payload.event_nonce) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>❌ 必要な情報が不足しています。</span>";
+              return;
+            }
+
+            const decrypted_device_id = await decryptDeviceId(payload.device_id_encrypted);
+
+            if (payload.device_id === decrypted_device_id) {
+              document.getElementById("result").innerHTML =
+                "<span class='match'>✅ 認証成功：同一端末のQRコードです！</span>";
+            } else {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>❌ 認証失敗：端末情報が一致しません。</span>";
+            }
+
+          } catch (e) {
+            console.error("解析エラー:", e);
+            document.getElementById("result").innerHTML =
+              "<span class='mismatch'>❌ JWTの解析に失敗しました。</span>";
+          }
         },
-        (errorMessage) => { /* 読み取り失敗は無視 */ }
+        (error) => {
+          // スキャン中のエラーは無視してOK
+        }
       );
     }
-
-    // --- 認証処理 ---
-    async function verifyQRCode(jwt) {
-      const resultEl = document.getElementById("result");
-      try {
-        const payload = decodePayload(jwt);
-        document.getElementById("payload").textContent = JSON.stringify(payload, null, 2);
-
-        const key = await getAesKey();
-        const decryptedDeviceId = await decryptAES(payload.encrypted_device_id, payload.iv, key);
-
-        if (payload.device_id === decryptedDeviceId) {
-          resultEl.innerHTML = "<span class='match'>✅ 認証成功：同一端末から発行されたQRコードです</span>";
-        } else {
-          resultEl.innerHTML = "<span class='mismatch'>❌ 認証失敗：端末情報が一致しません</span>";
-        }
-
-      } catch (e) {
-        console.error("エラー:", e);
-        alert("QRコードの解析・復号に失敗しました。");
-        resultEl.textContent = '';
-      }
-    }
   </script>
+
 </body>
 </html>

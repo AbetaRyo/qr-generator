@@ -122,7 +122,8 @@
       const payload = {
         event_nonce, // ✅ 会場乱数
         ticket_number, // ✅ チケット番号
-        device_id_encrypted: encrypted_device_id,
+        device_id, //復号確認用に平文の端末番号も含める
+        device_id_encrypted: encrypted_device_id, //暗号化済みの端末番号
         iat: KJUR.jws.IntDate.get('now'),
         exp: KJUR.jws.IntDate.get('now + 1hour')
       };
@@ -186,6 +187,7 @@
   </script>
 </body>
 </html>
+
 
 
 

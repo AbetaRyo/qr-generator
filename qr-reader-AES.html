@@ -45,6 +45,7 @@
 
     // AES復号処理（QR生成側と対応）
     async function decryptDeviceId(base64) {
+    try {
       const key = await getAesKey();
       const data = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const iv = data.slice(0, 12);
@@ -133,3 +134,4 @@
 
 </body>
 </html>
+

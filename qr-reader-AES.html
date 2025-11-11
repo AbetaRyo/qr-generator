@@ -68,7 +68,6 @@
       const readerDiv = document.getElementById("reader");
       readerDiv.innerHTML = "";
       const html5QrCode = new Html5Qrcode("reader");
-
       const config = { fps: 10, qrbox: 250 };
 
       html5QrCode.start(
@@ -83,6 +82,12 @@
             document.getElementById("payloadDisplay").textContent =
               JSON.stringify(payload, null, 2);
 
+            // 🧩 短縮キーと通常キーの両対応
+            const event_nonce = payload.event_nonce || payload.e;
+            const ticket_number = payload.ticket_number || payload.t;
+            const device_id = payload.device_id || payload.d;
+            const device_id_encrypted = payload.device_id_encrypted || payload.de;
+            
             // AES復号して比較
             if (!payload.device_id_encrypted || !payload.event_nonce) {
               document.getElementById("result").innerHTML =
@@ -115,3 +120,4 @@
 
 </body>
 </html>
+

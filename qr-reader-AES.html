@@ -68,6 +68,7 @@
       const readerDiv = document.getElementById("reader");
       readerDiv.innerHTML = "";
       const html5QrCode = new Html5Qrcode("reader");
+
       const config = { fps: 10, qrbox: 250 };
 
       html5QrCode.start(
@@ -82,18 +83,13 @@
             document.getElementById("payloadDisplay").textContent =
               JSON.stringify(payload, null, 2);
 
-            // 🧩 短縮キーと通常キーの両対応
-            const event_nonce = payload.event_nonce || payload.e;
-            const ticket_number = payload.ticket_number || payload.t;
-            const device_id = payload.device_id || payload.d;
-            const device_id_encrypted = payload.device_id_encrypted || payload.de;
-            
             // AES復号して比較
-            if (!event_nonce || !ticket_number || !device_id || !device_id_encrypted) {
+            if (!payload.device_id_encrypted || !payload.event_nonce) {
               document.getElementById("result").innerHTML =
-              "<span class='mismatch'>❌ 必要な情報が不足しています。</span>";
+                "<span class='mismatch'>❌ 必要な情報が不足しています。</span>";
               return;
             }
+
             const decrypted_device_id = await decryptDeviceId(payload.device_id_encrypted);
 
             if (payload.device_id === decrypted_device_id) {
@@ -119,5 +115,3 @@
 
 </body>
 </html>
-
-

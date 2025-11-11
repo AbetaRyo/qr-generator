@@ -172,9 +172,18 @@
         const payloadB64 = parts[1];
         const base64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
         const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
-
         const decodedStr = atob(padded);
         const decodedJSON = JSON.parse(decodedStr);
+
+         // 短縮キーを見やすく変換して表示
+        const readable = {
+          event_nonce: decodedJSON.e,
+          ticket_number: decodedJSON.t,
+          device_id: decodedJSON.d,
+          device_id_encrypted: decodedJSON.x,
+          issued_at: decodedJSON.i,
+          expires_at: decodedJSON.p
+        };
 
         document.getElementById('payloadDisplay').textContent =
           JSON.stringify(decodedJSON, null, 2);
@@ -187,6 +196,7 @@
   </script>
 </body>
 </html>
+
 
 
 

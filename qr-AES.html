@@ -119,13 +119,13 @@
       const encrypted_device_id = await encryptDeviceId(device_id);
 
       // JWTペイロード
-      const payload = {
-        event_nonce, // ✅ 会場乱数
-        ticket_number, // ✅ チケット番号
-        device_id, //復号確認用に平文の端末番号も含める
-        device_id_encrypted: encrypted_device_id, //暗号化済みの端末番号
-        iat: KJUR.jws.IntDate.get('now'),
-        exp: KJUR.jws.IntDate.get('now + 1hour')
+     const payload = {
+        e: event_nonce,             // event_nonce
+        t: ticket_number,           // ticket_number
+        d: device_id,               // device_id
+        x: encrypted_device_id,     // device_id_encrypted
+        i: KJUR.jws.IntDate.get('now'),        // iat
+        p: KJUR.jws.IntDate.get('now + 1hour') // exp
       };
 
       // JWT署名
@@ -187,6 +187,7 @@
   </script>
 </body>
 </html>
+
 
 
 

@@ -45,17 +45,12 @@
 
     // AES復号処理（QR生成側と対応）
     async function decryptDeviceId(base64) {
-    try {
       const key = await getAesKey();
       const data = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const iv = data.slice(0, 12);
       const cipher = data.slice(12);
       const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
       return new TextDecoder().decode(plain);
-    } catch (err) {
-        console.error("復号エラー:", err);
-        return null;
-      }
     }
 
     // JWTデコード
@@ -74,13 +69,13 @@
       readerDiv.innerHTML = "";
       const html5QrCode = new Html5Qrcode("reader");
 
-      const config = { fps: 5, qrbox: { width: 250, height: 250 } };
-      
+      const config = { fps: 10, qrbox: 250 };
+
       html5QrCode.start(
         { facingMode: "environment" },
         config,
         async (decodedText) => {
-          console.log("QR読み取り成功:", decodedText);
+          html5QrCode.stop();
           document.getElementById("jwtDisplay").textContent = decodedText;
 
           try {
@@ -89,7 +84,7 @@
               JSON.stringify(payload, null, 2);
 
             // AES復号して比較
-            if (!payload.device_id || !payload.device_id_encrypted || !payload.ticket_id || !payload.event_nonce) {
+            if (!payload.device_id_encrypted || !payload.event_nonce) {
               document.getElementById("result").innerHTML =
                 "<span class='mismatch'>❌ 必要な情報が不足しています。</span>";
               return;
@@ -97,36 +92,22 @@
 
             const decrypted_device_id = await decryptDeviceId(payload.device_id_encrypted);
 
-            // 🔍 認証判定
-            if (!decrypted_device_id) {
-              document.getElementById("result").innerHTML =
-                "<span class='mismatch'>❌ 復号に失敗しました。</span>";
-              return;
-            }
-
             if (payload.device_id === decrypted_device_id) {
               document.getElementById("result").innerHTML =
-                `<span class='match'>✅ 認証成功！</span><br>
-                 チケット番号：${payload.ticket_id}<br>
-                 乱数：${payload.event_nonce}<br>
-                 端末ID一致：${payload.device_id}`;
+                "<span class='match'>✅ 認証成功：同一端末のQRコードです！</span>";
             } else {
               document.getElementById("result").innerHTML =
-                `<span class='mismatch'>❌ 認証失敗：端末番号が一致しません。</span><br>
-                 復号結果：${decrypted_device_id}`;
+                "<span class='mismatch'>❌ 認証失敗：端末情報が一致しません。</span>";
             }
 
           } catch (e) {
             console.error("解析エラー:", e);
             document.getElementById("result").innerHTML =
-              "<span class='mismatch'>❌ JWT解析に失敗しました。</span>";
+              "<span class='mismatch'>❌ JWTの解析に失敗しました。</span>";
           }
-
-          // スキャンを3秒後に停止
-          setTimeout(() => html5QrCode.stop().catch(() => {}), 3000);
         },
-        (errorMessage) => {
-          // スキャン中のエラーはスルー
+        (error) => {
+          // スキャン中のエラーは無視してOK
         }
       );
     }
@@ -134,4 +115,3 @@
 
 </body>
 </html>
-

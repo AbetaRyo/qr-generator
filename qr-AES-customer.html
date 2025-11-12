@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>👤 お客様用：会場QRコード生成（店QR読み込み＋会場乱数追加）</title>
+
+  <!-- JWT処理ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
+  <!-- QRコード生成・読み取りライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 40px;
+    }
+    input {
+      margin: 5px;
+      padding: 5px;
+      width: 240px;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 25px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #reader {
+      width: 300px;
+      margin: 20px auto;
+    }
+    canvas {
+      margin-top: 20px;
+    }
+    pre {
+      text-align: left;
+      margin: 20px auto;
+      width: 90%;
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>👤 お客様用：会場QRコード生成</h1>
+  <p>店から受け取ったQRを読み取り、自分の端末番号と会場乱数を追加して新しいQRを生成します。</p>
+
+  <!-- 店から受け取ったJWT（またはQR読み取り） -->
+  <div id="reader"></div>
+  <textarea id="shop_jwt" rows="4" cols="50" placeholder="店側QRから読み取ったJWTを貼り付けてもOK"></textarea><br>
+
+  <!-- 自分の端末番号と会場乱数 -->
+  <input type="text" id="device_id" placeholder="自分の端末番号を入力"><br>
+  <input type="text" id="event_nonce" placeholder="会場乱数を入力"><br>
+
+  <button onclick="generateCustomerQR()">QRコードを生成</button>
+
+  <div id="qrcode"></div>
+
+  <h3>📦 生成されたJWT</h3>
+  <pre id="jwtDisplay"></pre>
+
+  <script>
+    let currentShopPayload = null;
+
+    // QRリーダーを起動
+    function startScanner() {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          document.getElementById("shop_jwt").value = decodedText;
+          html5QrCode.stop();
+          parseShopJWT(decodedText);
+        },
+        (error) => {}
+      );
+    }
+    startScanner(); // 自動起動
+
+    // 店のJWTをデコード
+    function parseShopJWT(jwt) {
+      try {
+        const parts = jwt.split(".");
+        if (parts.length !== 3) throw new Error("JWT形式が不正です");
+
+        const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = payloadB64.padEnd(payloadB64.length + (4 - payloadB64.length % 4) % 4, '=');
+        const decodedStr = atob(padded);
+        currentShopPayload = JSON.parse(decodedStr);
+
+        alert("店のQRを読み取りました！\nチケット番号：" + currentShopPayload.ticket_number);
+      } catch (e) {
+        console.error("店JWTデコードエラー:", e);
+        alert("店のQRの解析に失敗しました。");
+      }
+    }
+
+    // JWT生成（お客様用QRコード）
+    async function generateCustomerQR() {
+      const device_id = document.getElementById('device_id').value.trim();
+      const event_nonce = document.getElementById('event_nonce').value.trim();
+      const shop_jwt = document.getElementById('shop_jwt').value.trim();
+
+      if (!shop_jwt || !device_id || !event_nonce) {
+        alert("店のJWT、自分の端末番号、会場乱数をすべて入力してください。");
+        return;
+      }
+
+      if (!currentShopPayload) parseShopJWT(shop_jwt);
+
+      const payload = {
+        ticket_number: currentShopPayload.ticket_number,
+        device_id: device_id,
+        device_id_encrypted: currentShopPayload.device_id_encrypted,
+        event_nonce: event_nonce,
+        iat: KJUR.jws.IntDate.get('now'),
+        exp: KJUR.jws.IntDate.get('now + 1hour')
+      };
+
+      const header = { alg: "HS256", typ: "JWT" };
+      const secret = "your_super_secret_key";
+
+      try {
+        const sJWT = KJUR.jws.JWS.sign(null, JSON.stringify(header), JSON.stringify(payload), secret);
+        document.getElementById('jwtDisplay').textContent = sJWT;
+
+        // QRコードを表示
+        const qrDiv = document.getElementById('qrcode');
+        qrDiv.innerHTML = '';
+        QRCode.toCanvas(sJWT, { width: 280, margin: 1 }, (error, canvas) => {
+          if (error) {
+            console.error(error);
+            alert("QRコードの生成に失敗しました。");
+          } else {
+            qrDiv.appendChild(canvas);
+          }
+        });
+
+      } catch (e) {
+        console.error("JWT生成エラー", e);
+        alert("JWT生成に失敗しました。");
+      }
+    }
+  </script>
+</body>
+</html>

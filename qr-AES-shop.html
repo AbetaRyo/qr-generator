@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>🏪 ショップ用：チケットQRコード生成（端末ID暗号化＋JWT署名）</title>
+
+  <!-- JWT生成ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
+  <!-- QRコード生成ライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 40px;
+    }
+    input {
+      margin: 5px;
+      padding: 5px;
+      width: 240px;
+    }
+    button {
+      margin: 10px;
+      padding: 10px 25px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    canvas {
+      margin-top: 20px;
+    }
+    pre {
+      text-align: left;
+      margin: 20px auto;
+      width: 90%;
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>🏪 ショップ用：チケットQRコード生成</h1>
+  <p>お客様の端末番号を暗号化し、チケット番号と一緒にQRコード化します。</p>
+
+  <!-- 入力欄 -->
+  <input type="text" id="device_id" placeholder="お客様の端末番号を入力"><br>
+  <input type="text" id="ticket_number" placeholder="チケット番号を入力"><br>
+
+  <button onclick="generateQRCode()">QRコードを生成</button>
+  <button onclick="decodeJWT()">🔍 JWTをデコード</button>
+
+  <div id="qrcode"></div>
+
+  <h3>📦 JWT（暗号化済みチケットデータ）</h3>
+  <pre id="jwtDisplay"></pre>
+
+  <h3>🔍 JWTの中身（Payload）</h3>
+  <pre id="payloadDisplay"></pre>
+
+  <script>
+    let currentJWT = '';
+
+    // AES鍵（デモ用固定キー）
+    async function getAesKey() {
+      const keyMaterial = new TextEncoder().encode("1234567890abcdef1234567890abcdef");
+      return crypto.subtle.importKey(
+        "raw",
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    // 暗号化処理（AES-GCM）
+    async function encryptDeviceId(deviceId) {
+      const key = await getAesKey();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(deviceId);
+      const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+
+      // IVと暗号文を結合 → Base64化
+      const combined = new Uint8Array(iv.length + cipher.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(cipher), iv.length);
+      return btoa(String.fromCharCode(...combined));
+    }
+
+    // QRコード生成処理
+    async function generateQRCode() {
+      const device_id = document.getElementById('device_id').value.trim();
+      const ticket_number = document.getElementById('ticket_number').value.trim();
+
+      if (!device_id || !ticket_number) {
+        alert('「端末番号」と「チケット番号」を入力してください。');
+        return;
+      }
+
+      // 端末番号を暗号化
+      const encrypted_device_id = await encryptDeviceId(device_id);
+
+      // JWTペイロード（シンプルに短くする）
+      const payload = {
+        ticket_number,
+        device_id_encrypted: encrypted_device_id,
+        iat: KJUR.jws.IntDate.get('now'),
+        exp: KJUR.jws.IntDate.get('now + 1hour')
+      };
+
+      // JWT署名
+      const header = { alg: "HS256", typ: "JWT" };
+      const secret = "your_super_secret_key";
+
+      try {
+        const sJWT = KJUR.jws.JWS.sign(null, JSON.stringify(header), JSON.stringify(payload), secret);
+        currentJWT = sJWT;
+
+        // QRコード出力
+        const qrDiv = document.getElementById('qrcode');
+        qrDiv.innerHTML = '';
+        QRCode.toCanvas(sJWT, { width: 280, margin: 1 }, (error, canvas) => {
+          if (error) {
+            console.error(error);
+            alert("QRコードの生成に失敗しました。");
+          } else {
+            qrDiv.appendChild(canvas);
+          }
+        });
+
+        // JWT文字列を表示
+        document.getElementById('jwtDisplay').textContent = sJWT;
+        document.getElementById('payloadDisplay').textContent = '';
+
+      } catch (e) {
+        console.error("JWT生成エラー", e);
+        alert("JWT生成に失敗しました。");
+      }
+    }
+
+    // JWTデコード
+    function decodeJWT() {
+      if (!currentJWT) {
+        alert('まだJWTが生成されていません。');
+        return;
+      }
+
+      try {
+        const parts = currentJWT.split(".");
+        if (parts.length !== 3) throw new Error("JWT形式が不正です");
+
+        const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = payloadB64.padEnd(payloadB64.length + (4 - payloadB64.length % 4) % 4, '=');
+        const decodedStr = atob(padded);
+        const decodedJSON = JSON.parse(decodedStr);
+
+        document.getElementById('payloadDisplay').textContent =
+          JSON.stringify(decodedJSON, null, 2);
+
+      } catch (e) {
+        console.error("デコードエラー:", e);
+        alert("JWTのデコードに失敗しました。");
+      }
+    }
+  </script>
+</body>
+</html>

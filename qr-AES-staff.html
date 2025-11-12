@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>🔐 JWT照合（QR読み取り＋AES復号）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.24/jsrsasign-all-min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px; cursor: pointer; }
+    pre { background: #f9f9f9; padding: 10px; white-space: pre-wrap; text-align: left; width: 90%; margin: 10px auto; border-radius: 8px; border: 1px solid #ccc; }
+    #reader { width: 320px; margin: 20px auto; }
+    .match { color: green; font-weight: bold; }
+    .mismatch { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h1>🔐 JWT認証（AES復号＋QR読み取り）</h1>
+
+  <p>②で生成されたQRコードを読み取り、端末番号を照合します。</p>
+  <button onclick="startScan()">📷 QRコードを読み取る</button>
+  <div id="reader"></div>
+
+  <h3>📦 JWT（文字列）</h3>
+  <pre id="jwtDisplay"></pre>
+
+  <h3>📄 Payload</h3>
+  <pre id="payloadDisplay"></pre>
+
+  <h3>🔍 認証結果</h3>
+  <p id="result"></p>
+
+  <script>
+    // AES鍵（①②と同一の固定キーを使用）
+    async function getAesKey() {
+      const keyMaterial = new TextEncoder().encode("1234567890abcdef1234567890abcdef");
+      return crypto.subtle.importKey(
+        "raw",
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    // AES復号処理
+    async function decryptDeviceId(base64) {
+      try {
+        const key = await getAesKey();
+        const data = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const iv = data.slice(0, 12);
+        const cipher = data.slice(12);
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+        return new TextDecoder().decode(plain);
+      } catch (e) {
+        console.error("復号エラー:", e);
+        return null;
+      }
+    }
+
+    // JWTデコード
+    function decodePayload(jwt) {
+      const parts = jwt.split(".");
+      if (parts.length !== 3) throw new Error("JWT形式が不正です");
+      const payloadB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = payloadB64.padEnd(payloadB64.length + (4 - payloadB64.length % 4) % 4, "=");
+      const decoded = atob(padded);
+      return JSON.parse(decoded);
+    }
+
+    // QR読み取り開始
+    function startScan() {
+      const readerDiv = document.getElementById("reader");
+      readerDiv.innerHTML = "";
+      const html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        async (decodedText) => {
+          await html5QrCode.stop();
+          document.getElementById("jwtDisplay").textContent = decodedText;
+
+          try {
+            const payload = decodePayload(decodedText);
+            document.getElementById("payloadDisplay").textContent =
+              JSON.stringify(payload, null, 2);
+
+            // 情報が足りない場合
+            if (!payload.device_id_encrypted || !payload.device_id) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>⚠️ 必要な情報（device_id / device_id_encrypted）が不足しています。</span>";
+              return;
+            }
+
+            const decrypted = await decryptDeviceId(payload.device_id_encrypted);
+
+            if (!decrypted) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>❌ AES復号に失敗しました。</span>";
+              return;
+            }
+
+            // 一致判定
+            if (payload.device_id === decrypted) {
+              document.getElementById("result").innerHTML =
+                `<span class='match'>✅ 認証成功！同一端末のQRコードです。<br>復号結果：${decrypted}</span>`;
+            } else {
+              document.getElementById("result").innerHTML =
+                `<span class='mismatch'>❌ 認証失敗：端末番号が一致しません。<br>復号結果：${decrypted}</span>`;
+            }
+
+          } catch (e) {
+            console.error("解析エラー:", e);
+            document.getElementById("result").innerHTML =
+              "<span class='mismatch'>❌ JWTの解析に失敗しました。</span>";
+          }
+
+          // 再スキャンボタン
+          const retryBtn = document.createElement("button");
+          retryBtn.textContent = "🔄 もう一度スキャンする";
+          retryBtn.onclick = startScan;
+          document.getElementById("reader").appendChild(retryBtn);
+        },
+        (error) => { /* スキャン中のエラーは無視 */ }
+      );
+    }
+  </script>
+
+</body>
+</html>

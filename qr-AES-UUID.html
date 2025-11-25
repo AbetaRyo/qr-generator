@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>端末番号ジェネレーター</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    #deviceIdBox { 
+      margin-top: 20px; 
+      padding: 10px; 
+      border: 1px solid #ccc; 
+      width: 300px; 
+      word-break: break-all;
+      font-size: 18px;
+      background: #f8f8f8;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>端末番号（デバイスID）生成ツール</h2>
+  <p>ボタンを押すと端末番号が生成されます。</p>
+
+  <button id="generateBtn">端末番号を生成</button>
+
+  <div id="deviceIdBox">まだ生成されていません</div>
+
+  <button id="copyBtn" style="display:none;">コピー</button>
+
+  <script>
+    // UUID生成関数（スマホ・ブラウザ対応）
+    function generateDeviceId() {
+      return crypto.randomUUID();
+    }
+
+    // 生成ボタン押下
+    document.getElementById("generateBtn").addEventListener("click", () => {
+      const id = generateDeviceId();
+      document.getElementById("deviceIdBox").textContent = id;
+
+      const copyBtn = document.getElementById("copyBtn");
+      copyBtn.style.display = "inline-block";
+
+      // 生成したら自動コピー（便利）
+      navigator.clipboard.writeText(id);
+      alert("端末番号を生成し、クリップボードにコピーしました！");
+    });
+
+    // コピー手動ボタン
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const id = document.getElementById("deviceIdBox").textContent;
+      navigator.clipboard.writeText(id);
+      alert("コピーしました！");
+    });
+  </script>
+
+</body>
+</html>

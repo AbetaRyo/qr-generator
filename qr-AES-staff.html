@@ -66,19 +66,19 @@
     async function decryptWithNonce(base64, nonceKey) {
       try {
         const raw = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const iv = raw.slice(0, 16);
-        const cipher = raw.slice(16);
+        const iv = raw.slice(0, 12);
+        const cipher = raw.slice(12);
         const keyData = new TextEncoder().encode(nonceKey.padEnd(32).slice(0, 32));
         const key = await crypto.subtle.importKey(
           "raw",
           keyData,
-          { name: "AES-CBC" },
+          { name: "AES-GCM" },
           false,
           ["decrypt"]
         );
 
         const plainBuffer = await crypto.subtle.decrypt(
-          { name: "AES-CBC", iv },
+          { name: "AES-GCM", iv: iv, tagLength: 128 },
           key,
           cipher
         );
@@ -184,5 +184,6 @@
 
 </body>
 </html>
+
 
 

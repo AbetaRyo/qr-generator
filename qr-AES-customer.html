@@ -84,6 +84,38 @@
     }
     startScanner(); // 自動起動
 
+  // AES暗号化（WebCrypto）
+  async function aesEncrypt(text, keyText) {
+    const enc = new TextEncoder();
+
+    // AES-256用に32byte鍵に調整
+    const keyData = enc.encode(keyText.padEnd(32).slice(0, 32));
+
+    const iv = crypto.getRandomValues(new Uint8Array(16));
+
+    const key = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "AES-CBC" },
+      false,
+      ["encrypt"]
+    );
+
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: "AES-CBC", iv },
+      key,
+      enc.encode(text)
+    );
+
+    // iv + ciphertext をまとめて Base64化
+    const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
+    combined.set(iv);
+    combined.set(new Uint8Array(ciphertext), iv.length);
+
+    return btoa(String.fromCharCode(...combined));
+  }
+
+
     // 店のJWTをデコード
     function parseShopJWT(jwt) {
       try {
@@ -115,10 +147,17 @@
 
       if (!currentShopPayload) parseShopJWT(shop_jwt);
 
+      // 店の暗号化端末番号
+      const originalEncryptedDeviceId = currentShopPayload.device_id_encrypted;
+
+      // ⭐会場乱数で再暗号化
+      const reEncryptedDeviceId = await aesEncrypt(originalEncryptedDeviceId, event_nonce);
+
+      //JWT作成
       const payload = {
         ticket_number: currentShopPayload.ticket_number,
         device_id: device_id,
-        device_id_encrypted: currentShopPayload.device_id_encrypted,
+        device_id_reencrypted: reEncryptedDeviceId,
         event_nonce: event_nonce,
         iat: KJUR.jws.IntDate.get('now'),
         exp: KJUR.jws.IntDate.get('now + 1hour')
@@ -151,3 +190,4 @@
   </script>
 </body>
 </html>
+

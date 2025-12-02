@@ -19,6 +19,9 @@
   <h1>🔐 JWT認証（AES復号＋QR読み取り）</h1>
 
   <p>②で生成されたQRコードを読み取り、端末番号を照合します。</p>
+
+  <input id="event_nonce_input" placeholder="会場乱数を入力"><br>
+  
   <button onclick="startScan()">📷 QRコードを読み取る</button>
   <div id="reader"></div>
 
@@ -44,7 +47,7 @@
       );
     }
 
-    // AES復号処理
+    // 店暗号復号処理
     async function decryptDeviceId(base64) {
       try {
         const key = await getAesKey();
@@ -54,11 +57,40 @@
         const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
         return new TextDecoder().decode(plain);
       } catch (e) {
-        console.error("復号エラー:", e);
+        console.error("店暗号復号エラー:", e);
         return null;
       }
     }
 
+    //会場乱数暗号復号処理
+    async function decryptWithNonce(base64, nonceKey) {
+      try {
+        const raw = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        const iv = raw.slice(0, 16);
+        const cipher = raw.slice(16);
+        const keyData = new TextEncoder().encode(nonceKey.padEnd(32).slice(0, 32));
+        const key = await crypto.subtle.importKey(
+          "raw",
+          keyData,
+          { name: "AES-CBC" },
+          false,
+          ["decrypt"]
+        );
+
+        const plainBuffer = await crypto.subtle.decrypt(
+          { name: "AES-CBC", iv },
+          key,
+          cipher
+        );
+
+        return new TextDecoder().decode(plainBuffer);
+
+      } catch (e) {
+        console.error("会場乱数復号エラー:", e);
+        return null;
+      }
+    } 
+    
     // JWTデコード
     function decodePayload(jwt) {
       const parts = jwt.split(".");
@@ -87,14 +119,36 @@
             document.getElementById("payloadDisplay").textContent =
               JSON.stringify(payload, null, 2);
 
+            const eventNonce = document.getElementById("event_nonce_input").value.trim();
+
+           
             // 情報が足りない場合
+             if (!eventNonce) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>⚠️ 会場乱数を入力してください。</span>";
+              return;
+            }
+            
             if (!payload.device_id_encrypted || !payload.device_id) {
               document.getElementById("result").innerHTML =
                 "<span class='mismatch'>⚠️ 必要な情報（device_id / device_id_encrypted）が不足しています。</span>";
               return;
             }
 
-            const decrypted = await decryptDeviceId(payload.device_id_encrypted);
+             //1段階目：会場乱数で復号(AES-CBC)
+            const storeEncrypted = await decryptWithNonce(
+              payload.device_id_encrypted,
+              eventNonce
+            );
+
+            if (!storeEncrypted) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>❌ 会場乱数が不正です（復号失敗）。</span>";
+              return;
+            }
+
+            //2段階目：固定鍵で端末番号を復号
+            const decrypted = await decryptDeviceId(storeEncrypted);
 
             if (!decrypted) {
               document.getElementById("result").innerHTML =
@@ -130,3 +184,4 @@
 
 </body>
 </html>
+

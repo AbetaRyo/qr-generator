@@ -129,7 +129,7 @@
               return;
             }
             
-            if (!payload.device_id_encrypted || !payload.device_id) {
+            if (!payload.device_id_reencrypted || !payload.device_id) {
               document.getElementById("result").innerHTML =
                 "<span class='mismatch'>⚠️ 必要な情報（device_id / device_id_encrypted）が不足しています。</span>";
               return;
@@ -137,7 +137,7 @@
 
              //1段階目：会場乱数で復号(AES-CBC)
             const storeEncrypted = await decryptWithNonce(
-              payload.device_id_encrypted,
+              payload.device_id_reencrypted,
               eventNonce
             );
 
@@ -184,4 +184,5 @@
 
 </body>
 </html>
+
 

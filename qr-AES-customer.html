@@ -96,13 +96,13 @@
     const key = await crypto.subtle.importKey(
       "raw",
       keyData,
-      { name: "AES-CBC" },
+      { name: "AES-GCM" },
       false,
       ["encrypt"]
     );
 
     const ciphertext = await crypto.subtle.encrypt(
-      { name: "AES-CBC", iv },
+      { name: "AES-GCM", iv: iv, taglength: 128 },
       key,
       enc.encode(text)
     );
@@ -190,4 +190,5 @@
   </script>
 </body>
 </html>
+
 

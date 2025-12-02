@@ -91,18 +91,18 @@
     // AES-256用に32byte鍵に調整
     const keyData = enc.encode(keyText.padEnd(32).slice(0, 32));
 
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iv = crypto.getRandomValues(new Uint8Array(16));
 
     const key = await crypto.subtle.importKey(
       "raw",
       keyData,
-      { name: "AES-GCM" },
+      { name: "AES-CBC" },
       false,
       ["encrypt"]
     );
 
     const ciphertext = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: iv, tagLength: 128, },
+      { name: "AES-CBC", iv },
       key,
       enc.encode(text)
     );
@@ -190,6 +190,7 @@
   </script>
 </body>
 </html>
+
 
 
 

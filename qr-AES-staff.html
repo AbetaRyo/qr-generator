@@ -78,7 +78,7 @@
         );
 
         const plainBuffer = await crypto.subtle.decrypt(
-          { name: "AES-GCM", iv: iv, tagLength: 128 },
+          { name: "AES-GCM", iv: iv, tagLength: 128, },
           key,
           cipher
         );
@@ -184,6 +184,7 @@
 
 </body>
 </html>
+
 
 
 

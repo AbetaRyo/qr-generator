@@ -129,26 +129,39 @@
               return;
             }
             
-            if (!payload.device_id_reencrypted || !payload.device_id) {
+            if (!payload.encrypted_bundle || !payload.device_id) {
               document.getElementById("result").innerHTML =
                 "<span class='mismatch'>⚠️ 必要な情報（device_id / device_id_encrypted）が不足しています。</span>";
               return;
             }
 
              //1段階目：会場乱数で復号(AES-CBC)
-            const storeEncrypted = await decryptWithNonce(
-              payload.device_id_reencrypted,
+            const decryptedBundleText = await decryptWithNonce(
+              payload.encrypted_bundle,
               eventNonce
             );
 
-            if (!storeEncrypted) {
+            if (!decryptedBundleText) {
               document.getElementById("result").innerHTML =
                 "<span class='mismatch'>❌ 会場乱数が不正です（復号失敗）。</span>";
               return;
             }
 
+            // JSONとして展開
+            let bundle;
+            try {
+              bundle = JSON.parse(decryptedBundleText);
+            } catch (e) {
+              document.getElementById("result").innerHTML =
+                "<span class='mismatch'>❌ 復号データの形式が不正です。</span>";
+              return;
+            }
+
+            const storeEncryptedDeviceId = bundle.device_id_encrypted;
+            const ticketNumber = bundle.ticket_number;
+            
             //2段階目：固定鍵で端末番号を復号
-            const decrypted = await decryptDeviceId(storeEncrypted);
+            const decrypted = await decryptDeviceId(storeEncryptedDeviceId);
 
             if (!decrypted) {
               document.getElementById("result").innerHTML =
@@ -159,10 +172,15 @@
             // 一致判定
             if (payload.device_id === decrypted) {
               document.getElementById("result").innerHTML =
-                `<span class='match'>✅ 認証成功！同一端末のQRコードです。<br>復号結果：${decrypted}</span>`;
+                `<span class='match'>✅ 認証成功！同一端末のQRコードです。<br>
+                チケット番号：${ticketNumber}<br>
+                復号結果：${decrypted}
+                </span>`;
             } else {
               document.getElementById("result").innerHTML =
-                `<span class='mismatch'>❌ 認証失敗：端末番号が一致しません。<br>復号結果：${decrypted}</span>`;
+                `<span class='mismatch'>❌ 認証失敗：端末番号が一致しません。<br>
+                チケット番号：${ticketNumber}<br>
+                復号結果：${decrypted}</span>`;
             }
 
           } catch (e) {
@@ -184,6 +202,7 @@
 
 </body>
 </html>
+
 
 
 

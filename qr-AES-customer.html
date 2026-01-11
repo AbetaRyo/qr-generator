@@ -150,15 +150,19 @@
       // 店の暗号化端末番号
       const originalEncryptedDeviceId = currentShopPayload.device_id_encrypted;
 
+      // 🔐 チケット番号と端末番号をまとめる
+      const combinedData = JSON.stringify({
+        ticket_number: currentShopPayload.ticket_number,
+        device_id_encrypted: originalEncryptedDeviceId
+      });
+
       // ⭐会場乱数で再暗号化
-      const reEncryptedDeviceId = await aesEncrypt(originalEncryptedDeviceId, event_nonce);
+      const reEncryptedData = await aesEncrypt(combinedData, event_nonce);
 
       //JWT作成
       const payload = {
-        ticket_number: currentShopPayload.ticket_number,
         device_id: device_id,
-        device_id_reencrypted: reEncryptedDeviceId,
-        event_nonce: event_nonce,
+        device_id_bundle: reEncryptedData,
         iat: KJUR.jws.IntDate.get('now'),
         exp: KJUR.jws.IntDate.get('now + 1hour')
       };
@@ -190,6 +194,7 @@
   </script>
 </body>
 </html>
+
 
 
 

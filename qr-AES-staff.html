@@ -131,7 +131,7 @@
             
             if (!payload.encrypted_bundle || !payload.device_id) {
               document.getElementById("result").innerHTML =
-                "<span class='mismatch'>⚠️ 必要な情報（device_id / device_id_encrypted）が不足しています。</span>";
+                "<span class='mismatch'>⚠️ 必要な情報（device_id / encrypted_bundle）が不足しています。</span>";
               return;
             }
 
@@ -202,6 +202,7 @@
 
 </body>
 </html>
+
 
 
 
